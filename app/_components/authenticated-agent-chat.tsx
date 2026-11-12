@@ -10,8 +10,10 @@ export async function AuthenticatedAgentChat({
   readonly sessionId?: string;
   readonly sessionless?: boolean;
 }) {
+  const modelsEnabled = Boolean(process.env.EVE_MODEL_BASE_URL);
+
   if (process.env.NODE_ENV === "development") {
-    return <AgentChat sessionId={sessionId} sessionless={sessionless} />;
+    return <AgentChat sessionId={sessionId} sessionless={sessionless} modelsEnabled={modelsEnabled} />;
   }
 
   const session = await auth.api.getSession({ headers: await headers() });
@@ -19,7 +21,7 @@ export async function AuthenticatedAgentChat({
 
   return (
     <>
-      <AgentChat sessionId={sessionId} sessionless={sessionless} />
+      <AgentChat sessionId={sessionId} sessionless={sessionless} modelsEnabled={modelsEnabled} />
       <AccountControl
         email={session.user.email}
         image={session.user.image}

@@ -1,17 +1,22 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { defineAgent } from "eve";
 import { defineDynamic } from "eve/models";
+import { contextWindowFor, DEFAULT_FREE_MODEL_ID, findFreeModel } from "@/lib/free-models";
 
 /** Used when no OpenAI-compatible endpoint is configured. */
 const GATEWAY_MODEL = "zai/glm-4.7-flashx";
-const DEFAULT_CONTEXT_WINDOW = 128_000;
 
 export default defineAgent({
-  model: defineDynamic(() => {
+  model: defineDynamic((ctx) => {
     const baseURL = process.env.EVE_MODEL_BASE_URL;
-    const modelId = process.env.EVE_MODEL_ID;
-    if (!baseURL || !modelId) return GATEWAY_MODEL;
+    if (!baseURL) return GATEWAY_MODEL;
 
+    // The browser picks a model per turn; env is the fallback for non-browser callers.
+    const chosen = ctx.session.auth.current?.attributes.model;
+    const modelId =
+      typeof chosen === "string" && findFreeModel(chosen)
+        ? chosen
+        : (process.env.EVE_MODEL_ID ?? DEFAULT_FREE_MODEL_ID);
     const provider = createOpenAICompatible({
       name: "custom",
       baseURL,
@@ -23,7 +28,7 @@ export default defineAgent({
     return {
       model: provider(modelId),
       modelContextWindowTokens:
-        Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_CONTEXT_WINDOW,
+        Number.isFinite(configured) && configured > 0 ? configured : contextWindowFor(modelId),
     };
   }),
 });

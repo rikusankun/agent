@@ -22,7 +22,7 @@ import {
   SparklesIcon,
   SquareIcon,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -39,13 +39,23 @@ import {
   usePromptInputAttachments,
 } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Trace, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
+import { DEFAULT_FREE_MODEL_ID, FREE_MODELS } from "@/lib/free-models";
 import { AgentMessage } from "./agent-message";
 import { WEB_CHAT_AGENT } from "@/app/eve-agent";
 
 const DEFAULT_AGENT_NAME = "agent";
 const AGENT_NAME = WEB_CHAT_AGENT ?? DEFAULT_AGENT_NAME;
+const MODEL_STORAGE_KEY = "eve:free-model";
+const MODEL_HEADER = "x-eve-model";
 
 const STARTERS = [
   {
@@ -65,13 +75,30 @@ const STARTERS = [
 export function AgentChat({
   sessionId,
   sessionless = false,
+  modelsEnabled = false,
 }: {
   readonly sessionId?: string;
   readonly sessionless?: boolean;
+  readonly modelsEnabled?: boolean;
 }) {
   const [cancellationError, setCancellationError] = useState<string>();
   const [hasInputText, setHasInputText] = useState(false);
+  const [modelId, setModelId] = useState(DEFAULT_FREE_MODEL_ID);
+  const modelRef = useRef(modelId);
+  modelRef.current = modelId;
   const hasSubmittedMessage = useRef(false);
+
+  useEffect(() => {
+    if (!modelsEnabled) return;
+    const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
+    if (saved && FREE_MODELS.some((model) => model.id === saved)) setModelId(saved);
+  }, [modelsEnabled]);
+
+  const selectModel = (id: string) => {
+    if (!FREE_MODELS.some((model) => model.id === id)) return;
+    setModelId(id);
+    window.localStorage.setItem(MODEL_STORAGE_KEY, id);
+  };
   const replaceSessionRoute = (nextSessionId: string) => {
     if (sessionId !== undefined) return;
     // Framework routers (Next.js, TanStack Router) patch window.history; navigating
@@ -85,6 +112,8 @@ export function AgentChat({
   };
   const agent = useEveAgent({
     agent: WEB_CHAT_AGENT,
+    headers: (): Readonly<Record<string, string>> =>
+      modelsEnabled ? { [MODEL_HEADER]: modelRef.current } : {},
     prewarm: hasInputText,
     initialSession:
       sessionId === undefined
@@ -291,6 +320,7 @@ export function AgentChat({
             </div>
           </div>
         )}
+        {modelsEnabled ? <ModelPicker value={modelId} onChange={selectModel} /> : null}
         <div className="w-full">{composer}</div>
       </div>
     </main>
@@ -397,6 +427,35 @@ function activityLabel(activity: Activity): string {
     default:
       return "Thinking";
   }
+}
+
+function ModelPicker({
+  value,
+  onChange,
+}: {
+  readonly value: string;
+  readonly onChange: (id: string) => void;
+}) {
+  // Radix unmounts SelectContent while closed, so SelectValue cannot resolve the
+  // selected item's text on first paint. Render the label explicitly instead.
+  const selected = FREE_MODELS.find((model) => model.id === value);
+  return (
+    <div className="mb-2 flex w-full items-center justify-center gap-2 text-muted-foreground text-xs">
+      <span className="shrink-0">模型</span>
+      <Select onValueChange={onChange} value={value}>
+        <SelectTrigger className="h-7 w-auto max-w-[18rem] min-w-[10rem] gap-1 border-border/70 bg-card/60 px-2 text-xs">
+          <SelectValue placeholder="选择模型">{selected?.label ?? value}</SelectValue>
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          {FREE_MODELS.map((model) => (
+            <SelectItem key={model.id} value={model.id}>
+              {model.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
 }
 
 function toErrorMessage(error: unknown): string {

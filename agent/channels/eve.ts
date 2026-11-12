@@ -1,6 +1,20 @@
 import { eveChannel } from "eve/channels/eve";
 import { localDev, type AuthFn, vercelOidc } from "eve/channels/auth";
 import { auth } from "@/lib/auth";
+import { findFreeModel } from "@/lib/free-models";
+
+const MODEL_HEADER = "x-eve-model";
+
+/** Carry the browser's model choice into session auth so defineDynamic can read it. */
+function withModelChoice(authFn: AuthFn<Request>): AuthFn<Request> {
+  return async (request) => {
+    const result = await authFn(request);
+    if (!result) return result;
+    const model = request.headers.get(MODEL_HEADER);
+    if (!model || !findFreeModel(model)) return result;
+    return { ...result, attributes: { ...result.attributes, model } };
+  };
+}
 
 const betterAuthSession: AuthFn<Request> = async (request) => {
   const session = await auth.api.getSession({ headers: request.headers });
@@ -23,5 +37,5 @@ const betterAuthSession: AuthFn<Request> = async (request) => {
 };
 
 export default eveChannel({
-  auth: [betterAuthSession, vercelOidc(), localDev()],
+  auth: [betterAuthSession, vercelOidc(), localDev()].map(withModelChoice),
 });
