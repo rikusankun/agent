@@ -22,7 +22,7 @@ import {
   SparklesIcon,
   SquareIcon,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Conversation,
   ConversationContent,
@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/select";
 import { Trace, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
-import { DEFAULT_FREE_MODEL_ID, FREE_MODELS } from "@/lib/free-models";
+import { type FreeModel, DEFAULT_FREE_MODEL_ID, FREE_MODELS } from "@/lib/free-models";
 import { AgentMessage } from "./agent-message";
 import { WEB_CHAT_AGENT } from "@/app/eve-agent";
 
@@ -76,14 +76,19 @@ export function AgentChat({
   sessionId,
   sessionless = false,
   modelsEnabled = false,
+  localModels = [],
+  defaultModelId = DEFAULT_FREE_MODEL_ID,
 }: {
   readonly sessionId?: string;
   readonly sessionless?: boolean;
   readonly modelsEnabled?: boolean;
+  readonly localModels?: readonly FreeModel[];
+  readonly defaultModelId?: string;
 }) {
+  const modelOptions = useMemo(() => [...FREE_MODELS, ...localModels], [localModels]);
   const [cancellationError, setCancellationError] = useState<string>();
   const [hasInputText, setHasInputText] = useState(false);
-  const [modelId, setModelId] = useState(DEFAULT_FREE_MODEL_ID);
+  const [modelId, setModelId] = useState(defaultModelId);
   const modelRef = useRef(modelId);
   modelRef.current = modelId;
   const hasSubmittedMessage = useRef(false);
@@ -91,11 +96,11 @@ export function AgentChat({
   useEffect(() => {
     if (!modelsEnabled) return;
     const saved = window.localStorage.getItem(MODEL_STORAGE_KEY);
-    if (saved && FREE_MODELS.some((model) => model.id === saved)) setModelId(saved);
-  }, [modelsEnabled]);
+    if (saved && modelOptions.some((model) => model.id === saved)) setModelId(saved);
+  }, [modelsEnabled, modelOptions]);
 
   const selectModel = (id: string) => {
-    if (!FREE_MODELS.some((model) => model.id === id)) return;
+    if (!modelOptions.some((model) => model.id === id)) return;
     setModelId(id);
     window.localStorage.setItem(MODEL_STORAGE_KEY, id);
   };
@@ -320,7 +325,9 @@ export function AgentChat({
             </div>
           </div>
         )}
-        {modelsEnabled ? <ModelPicker value={modelId} onChange={selectModel} /> : null}
+        {modelsEnabled ? (
+          <ModelPicker onChange={selectModel} options={modelOptions} value={modelId} />
+        ) : null}
         <div className="w-full">{composer}</div>
       </div>
     </main>
@@ -432,13 +439,15 @@ function activityLabel(activity: Activity): string {
 function ModelPicker({
   value,
   onChange,
+  options,
 }: {
   readonly value: string;
   readonly onChange: (id: string) => void;
+  readonly options: readonly FreeModel[];
 }) {
   // Radix unmounts SelectContent while closed, so SelectValue cannot resolve the
   // selected item's text on first paint. Render the label explicitly instead.
-  const selected = FREE_MODELS.find((model) => model.id === value);
+  const selected = options.find((model) => model.id === value);
   return (
     <div className="mb-2 flex w-full items-center justify-center gap-2 text-muted-foreground text-xs">
       <span className="shrink-0">模型</span>
@@ -447,7 +456,7 @@ function ModelPicker({
           <SelectValue placeholder="选择模型">{selected?.label ?? value}</SelectValue>
         </SelectTrigger>
         <SelectContent className="max-h-72">
-          {FREE_MODELS.map((model) => (
+          {options.map((model) => (
             <SelectItem key={model.id} value={model.id}>
               {model.label}
             </SelectItem>

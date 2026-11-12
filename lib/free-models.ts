@@ -9,6 +9,8 @@ export interface FreeModel {
   readonly label: string;
   readonly contextTokens: number;
   readonly vision: boolean;
+  /** Served by a separate local endpoint (Ollama) instead of the DSH gateway. */
+  readonly local?: boolean;
 }
 
 const K = (n: number) => n * 1024;
@@ -146,7 +148,63 @@ export function findFreeModel(id: string): FreeModel | undefined {
   return FREE_MODELS.find((model) => model.id === id);
 }
 
-/** Unknown IDs still work; they just use the conservative default window. */
+export const DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:11434/v1";
+
+/**
+ * Local OpenAI-compatible models (Ollama), declared as a comma-separated list of
+ * IDs from `ollama list`. They use their own endpoint, not the DSH gateway.
+ */
+export function localModelsFromEnv(): FreeModel[] {
+  return (process.env.EVE_LOCAL_MODEL_IDS ?? "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)
+    .map((id) => ({
+      id,
+      label: shortLabel(id),
+      contextTokens: K(16),
+      vision: false,
+      local: true,
+    }));
+}
+
+function shortLabel(id: string): string {
+  const tail = id.split("/").pop() ?? id;
+  return tail.length > 44 ? `${tail.slice(0, 41)}…` : tail;
+}
+
+export function allModels(): FreeModel[] {
+  return [...FREE_MODELS, ...localModelsFromEnv()];
+}
+
+/** DSH catalogue plus locally installed models. Server-side only. */
+export function findModel(id: string): FreeModel | undefined {
+  return findFreeModel(id) ?? localModelsFromEnv().find((model) => model.id === id);
+}
+
+/** Each model resolves to its own OpenAI-compatible endpoint. */
+export function endpointFor(id: string):
+  | { readonly baseURL: string; readonly apiKey: string; readonly name: string }
+  | undefined {
+  if (findModel(id)?.local) {
+    return {
+      baseURL: process.env.EVE_LOCAL_MODEL_BASE_URL ?? DEFAULT_LOCAL_BASE_URL,
+      apiKey: process.env.EVE_LOCAL_MODEL_API_KEY ?? "ollama",
+      name: "ollama",
+    };
+  }
+  const baseURL = process.env.EVE_MODEL_BASE_URL;
+  if (!baseURL) return undefined;
+  return { baseURL, apiKey: process.env.EVE_MODEL_API_KEY ?? "", name: "custom" };
+}
+
 export function contextWindowFor(id: string): number {
-  return findFreeModel(id)?.contextTokens ?? DEFAULT_CONTEXT_WINDOW;
+  const model = findModel(id);
+  const override = Number(
+    model?.local
+      ? process.env.EVE_LOCAL_MODEL_CONTEXT_WINDOW
+      : process.env.EVE_MODEL_CONTEXT_WINDOW,
+  );
+  if (Number.isFinite(override) && override > 0) return override;
+  return model?.contextTokens ?? DEFAULT_CONTEXT_WINDOW;
 }

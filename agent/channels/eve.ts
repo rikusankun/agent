@@ -1,7 +1,7 @@
 import { eveChannel } from "eve/channels/eve";
 import { localDev, type AuthFn, vercelOidc } from "eve/channels/auth";
 import { auth } from "@/lib/auth";
-import { findFreeModel } from "@/lib/free-models";
+import { findModel } from "@/lib/free-models";
 
 const MODEL_HEADER = "x-eve-model";
 
@@ -11,7 +11,7 @@ function withModelChoice(authFn: AuthFn<Request>): AuthFn<Request> {
     const result = await authFn(request);
     if (!result) return result;
     const model = request.headers.get(MODEL_HEADER);
-    if (!model || !findFreeModel(model)) return result;
+    if (!model || !findModel(model)) return result;
     return { ...result, attributes: { ...result.attributes, model } };
   };
 }
