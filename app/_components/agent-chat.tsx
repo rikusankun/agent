@@ -11,7 +11,17 @@ import {
   type Activity,
 } from "eve/events";
 import { useEveAgent } from "eve/react";
-import { AlertCircleIcon, BrainIcon, PlusIcon, SquareIcon } from "lucide-react";
+import {
+  AlertCircleIcon,
+  ArrowUpRightIcon,
+  BrainIcon,
+  HeartIcon,
+  ListTodoIcon,
+  PlusIcon,
+  RotateCcwIcon,
+  SparklesIcon,
+  SquareIcon,
+} from "lucide-react";
 import { useRef, useState } from "react";
 import {
   Conversation,
@@ -36,6 +46,21 @@ import { WEB_CHAT_AGENT } from "@/app/eve-agent";
 
 const DEFAULT_AGENT_NAME = "agent";
 const AGENT_NAME = WEB_CHAT_AGENT ?? DEFAULT_AGENT_NAME;
+
+const STARTERS = [
+  {
+    icon: ListTodoIcon,
+    label: "理一理今天的任务",
+    prompt: "帮我理一理今天的任务，按优先级排一下",
+  },
+  { icon: RotateCcwIcon, label: "复盘这一周", prompt: "带我复盘一下这周，先给结论" },
+  {
+    icon: SparklesIcon,
+    label: "拆一个大目标",
+    prompt: "帮我拆一个大目标，给出步骤和大概耗时",
+  },
+  { icon: HeartIcon, label: "有点累，想聊聊", prompt: "今天有点累，想聊聊" },
+] as const;
 
 export function AgentChat({
   sessionId,
@@ -151,6 +176,11 @@ export function AgentChat({
     await agent.send(parts, options);
   };
 
+  const startWith = (prompt: string) => {
+    if (isResuming || isBusy) return;
+    void handleSubmit({ text: prompt, files: [] });
+  };
+
   const composer = (
     <PromptInput onSubmit={handleSubmit}>
       <PromptInputTextarea
@@ -168,7 +198,13 @@ export function AgentChat({
   );
 
   return (
-    <main className="flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+    <main className="relative flex h-dvh flex-col overflow-hidden bg-background text-foreground">
+      {showConversationLayout ? null : (
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+          <div className="hero-glow absolute top-[16%] left-1/2 size-[34rem] -translate-x-1/2 rounded-full opacity-20 blur-3xl" />
+          <div className="hero-grid absolute inset-0 opacity-30" />
+        </div>
+      )}
       {showConversationLayout ? (
         <ChatHeader canStartNewChat={activeSessionId !== undefined} />
       ) : null}
@@ -216,15 +252,43 @@ export function AgentChat({
 
       <div
         className={cn(
-          "mx-auto w-full px-4 sm:px-6",
+          "relative z-10 mx-auto w-full px-4 sm:px-6",
           showConversationLayout
             ? "fixed bottom-0 left-1/2 z-20 max-w-3xl -translate-x-1/2 bg-gradient-to-t from-background via-background to-transparent pt-4 pb-6"
-            : "flex max-w-xl flex-1 flex-col items-center justify-center gap-8 pb-[10vh]",
+            : "flex max-w-2xl flex-1 flex-col items-center justify-center gap-7 pb-[8vh]",
         )}
       >
         {showConversationLayout ? null : (
-          <div className="flex flex-col items-center gap-3 text-center">
-            <h1 className="font-medium text-5xl tracking-tighter">{AGENT_NAME}</h1>
+          <div className="flex w-full flex-col items-center gap-7 text-center">
+            <div className="relative">
+              <div className="absolute -inset-5 rounded-full bg-brand/20 blur-2xl" />
+              <div className="relative flex size-14 items-center justify-center rounded-2xl border border-brand/25 bg-brand-soft text-brand">
+                <SparklesIcon className="size-6" />
+              </div>
+            </div>
+            <div className="space-y-2.5">
+              <h1 className="font-medium text-4xl tracking-tight sm:text-5xl">
+                今天想从哪件事开始？
+              </h1>
+              <p className="mx-auto max-w-md text-sm leading-6 text-muted-foreground">
+                拆任务、排优先级、复盘；或者只是想有人听你说说话。
+              </p>
+            </div>
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+              {STARTERS.map(({ icon: Icon, label, prompt }) => (
+                <button
+                  className="group flex items-center gap-3 rounded-xl border border-border/70 bg-card/50 px-4 py-3 text-left text-sm transition-colors hover:border-brand/40 hover:bg-card disabled:opacity-50"
+                  disabled={isResuming || isBusy}
+                  key={label}
+                  onClick={() => startWith(prompt)}
+                  type="button"
+                >
+                  <Icon className="size-4 shrink-0 text-brand" />
+                  <span className="min-w-0 flex-1 truncate">{label}</span>
+                  <ArrowUpRightIcon className="size-3.5 shrink-0 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
+                </button>
+              ))}
+            </div>
           </div>
         )}
         <div className="w-full">{composer}</div>
